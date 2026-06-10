@@ -22,6 +22,58 @@ pip install "git+https://github.com/kuhaku-space/daily-problems-cli"
 uvx --from "git+https://github.com/kuhaku-space/daily-problems-cli" daily --help
 ```
 
+### Nix flake で使う
+
+このリポジトリは flake になっているので、Nix だけでビルド・実行できます。
+
+```bash
+# とりあえず実行する
+nix run github:kuhaku-space/daily-problems-cli -- --help
+
+# プロファイルにインストールする
+nix profile install github:kuhaku-space/daily-problems-cli
+```
+
+他の flake の `devShell` に追加したい場合は、入力として取り込み、その
+`packages.<system>.default` をシェルに含めます。
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    daily-problems-cli.url = "github:kuhaku-space/daily-problems-cli";
+    # nixpkgs を共有して重複ダウンロードを避ける
+    daily-problems-cli.inputs.nixpkgs.follows = "nixpkgs";
+  };
+
+  outputs = { self, nixpkgs, daily-problems-cli }:
+    let
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
+    in {
+      devShells.${system}.default = pkgs.mkShell {
+        packages = [
+          daily-problems-cli.packages.${system}.default
+        ];
+      };
+    };
+}
+```
+
+オーバーレイ経由で `pkgs.daily-problems-cli` として取り込むこともできます。
+
+```nix
+let
+  pkgs = import nixpkgs {
+    inherit system;
+    overlays = [ daily-problems-cli.overlays.default ];
+  };
+in
+pkgs.mkShell {
+  packages = [ pkgs.daily-problems-cli ];
+}
+```
+
 ## 使い方
 
 ```bash
@@ -50,6 +102,13 @@ token  = "..."
 
 ```bash
 uv sync
+uv run pytest
+```
+
+Nix を使う場合は `nix develop` で uv と pytest 入りのシェルに入れます。
+
+```bash
+nix develop
 uv run pytest
 ```
 
