@@ -4,6 +4,8 @@ Commands:
   daily login [--server URL] [--username U] [--label L]   authenticate, store token
   daily list                                              list today's problems
   daily get <id> [-o DIR|FILE]                            download a problem's input
+  daily download <id> [-o DIR|FILE]                       same as get
+  daily dl <id> [-o DIR|FILE]                             same as get
   daily submit <id> <outfile> [--code FILE]               hash & submit an output file
 """
 from __future__ import annotations
@@ -101,6 +103,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_get.add_argument("problem_id", type=int)
     p_get.add_argument("-o", "--output", help="保存先のファイルまたはディレクトリ")
     p_get.set_defaults(func=cmd_get)
+
+    p_download = sub.add_parser("download", help="入力ファイルをダウンロード")
+    p_download.add_argument("problem_id", type=int)
+    p_download.add_argument("-o", "--output", help="保存先のファイルまたはディレクトリ")
+    p_download.set_defaults(func=cmd_get)
+
+    p_dl = sub.add_parser("dl", help="入力ファイルをダウンロード")
+    p_dl.add_argument("problem_id", type=int)
+    p_dl.add_argument("-o", "--output", help="保存先のファイルまたはディレクトリ")
+    p_dl.set_defaults(func=cmd_get)
 
     p_submit = sub.add_parser("submit", help="出力ファイルのハッシュを計算して提出")
     p_submit.add_argument("problem_id", type=int)

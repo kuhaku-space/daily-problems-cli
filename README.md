@@ -80,6 +80,8 @@ pkgs.mkShell {
 daily login --server https://your-daily-problems.example.com   # ログインしてトークンを保存
 daily list                                                     # 公開中の問題一覧
 daily get 12 -o input.txt                                      # 問題12の入力をダウンロード
+daily download 12 -o input.txt                                 # get と同じ
+daily dl 12 -o input.txt                                       # get と同じ
 daily submit 12 output.txt                                     # output.txt の SHA-256 を計算して提出
 ```
 

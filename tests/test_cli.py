@@ -47,6 +47,20 @@ def test_get_downloads_input(stub_server, tmp_path, capsys):
     assert dest.read_bytes() == INPUT_BYTES
 
 
+def test_download_alias_downloads_input(stub_server, tmp_path, capsys):
+    _login(stub_server)
+    dest = tmp_path / "downloaded.txt"
+    assert main(["download", "1", "-o", str(dest)]) == 0
+    assert dest.read_bytes() == INPUT_BYTES
+
+
+def test_dl_alias_downloads_input(stub_server, tmp_path, capsys):
+    _login(stub_server)
+    dest = tmp_path / "dl.txt"
+    assert main(["dl", "1", "-o", str(dest)]) == 0
+    assert dest.read_bytes() == INPUT_BYTES
+
+
 def test_submit_wrong_then_correct(stub_server, tmp_path, capsys):
     _login(stub_server)
     capsys.readouterr()
