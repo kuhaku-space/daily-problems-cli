@@ -107,9 +107,10 @@ daily edit 12 --difficulty Hard           # 一部だけ更新（指定した項
 daily edit 12 --queue                     # 公開日を外してリリースキューに戻す
 daily edit 12 --remove-input              # 入力ファイルを削除
 daily rm 12                               # 削除（確認あり。-y で確認をスキップ）
-daily open-dates                          # 当月の空き日程
-daily open-dates --month 2026-08          # 指定月の空き日程
-daily open-dates --next --count 14        # 今日以降の空き日程を最大14件
+daily open-dates                          # 今日以降の直近の空き日程（既定）
+daily open-dates --count 14               # 今日以降の空き日程を最大14件
+daily open-dates --from 2026-08-01        # 起点日を指定
+daily open-dates --month 2026-08          # 指定月を月単位で表示
 ```
 
 - `create` / `edit` の想定出力は `--answer <ファイル>`（SHA-256 を計算）か `--answer-sha256 <64桁の16進>` のどちらかで指定します。問題文・解説はそれぞれ `--statement` / `--statement-file`、`--editorial` / `--editorial-file` でインライン・ファイルのどちらでも渡せます。

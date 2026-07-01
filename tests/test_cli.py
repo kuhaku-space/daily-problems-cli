@@ -105,7 +105,7 @@ def test_create_with_answer_file(stub_server, tmp_path, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "作成しました" in out
-    assert "#7" in out and "Sum" in out and "2026-07-03" in out
+    assert "#7" in out and "Sum" in out and "2026-07-03 (金)" in out  # 曜日付き
 
 
 def test_create_requires_answer(stub_server, capsys):
@@ -129,8 +129,10 @@ def test_mine_lists_all_statuses(stub_server, capsys):
     capsys.readouterr()
     assert main(["mine"]) == 0
     out = capsys.readouterr().out
-    assert "queued" in out and "published" in out
-    assert "(未定・キュー)" in out  # a queued problem has no date
+    assert "キュー" in out and "公開" in out  # 状態の日本語表記
+    assert "ID" in out and "タイトル" in out  # ヘッダ行
+    assert "Draft" in out and "Sum" in out
+    assert "—" in out  # a queued problem has no date
 
 
 def test_edit_requires_a_change(stub_server, capsys):
@@ -163,20 +165,20 @@ def test_delete_aborts_on_no(stub_server, capsys, monkeypatch):
     assert "中止" in capsys.readouterr().out
 
 
+def test_open_dates_defaults_to_next(stub_server, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    assert main(["open-dates", "--count", "2"]) == 0
+    out = capsys.readouterr().out
+    assert "2026-07-01 (水) 以降" in out and "2026-07-05 (日)" in out
+
+
 def test_open_dates_month(stub_server, capsys):
     _login(stub_server)
     capsys.readouterr()
     assert main(["open-dates", "--month", "2026-07"]) == 0
     out = capsys.readouterr().out
     assert "2026-07" in out and "2026-07-03" in out
-
-
-def test_open_dates_next(stub_server, capsys):
-    _login(stub_server)
-    capsys.readouterr()
-    assert main(["open-dates", "--next", "--count", "2"]) == 0
-    out = capsys.readouterr().out
-    assert "2026-07-01 以降" in out and "2026-07-05" in out
 
 
 def test_connection_error_is_clean(capsys, monkeypatch, tmp_path):

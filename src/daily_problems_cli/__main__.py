@@ -15,7 +15,7 @@ Authoring commands (作問者用):
   daily mine                                              list your authored problems
   daily edit <id> [same options as create, all optional] [--queue] [--remove-input]  update
   daily rm <id> [--yes]                                   delete a queued/future problem
-  daily open-dates [--month YYYY-MM] [--next] [--from YYYY-MM-DD] [--count N]  free dates
+  daily open-dates [--from YYYY-MM-DD] [--count N] [--month YYYY-MM]  free dates (next by default)
 """
 from __future__ import annotations
 
@@ -23,6 +23,8 @@ import argparse
 import getpass
 import hashlib
 import sys
+import unicodedata
+from datetime import date
 from pathlib import Path
 
 from . import config as cfg
@@ -30,6 +32,35 @@ from .client import ApiError, Client
 
 
 DIFFICULTIES = ["Easy", "Medium", "Hard", "Expert"]
+WEEKDAYS_JA = ["月", "火", "水", "木", "金", "土", "日"]  # date.weekday(): 0=月
+STATUS_LABELS = {"published": "公開", "scheduled": "予約", "queued": "キュー"}
+
+
+def _with_weekday(date_str: str) -> str:
+    """``"2026-07-03"`` -> ``"2026-07-03 (金)"``; unparseable input is returned as-is."""
+    try:
+        d = date.fromisoformat(date_str)
+    except (ValueError, TypeError):
+        return date_str
+    return f"{date_str} ({WEEKDAYS_JA[d.weekday()]})"
+
+
+def _display_width(text: str) -> int:
+    """Terminal column count, counting East-Asian wide/fullwidth chars as 2."""
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in text)
+
+
+def _pad(text: str, width: int) -> str:
+    return text + " " * max(0, width - _display_width(text))
+
+
+def _print_table(header: list[str], rows: list[list[str]]) -> None:
+    """Print rows as columns aligned on display width, with a header rule."""
+    widths = [max(_display_width(r[i]) for r in [header, *rows]) for i in range(len(header))]
+    print("  ".join(_pad(cell, widths[i]) for i, cell in enumerate(header)).rstrip())
+    print("  ".join("-" * widths[i] for i in range(len(header))))
+    for row in rows:
+        print("  ".join(_pad(cell, widths[i]) for i, cell in enumerate(row)).rstrip())
 
 
 def _sha256_file(path: Path) -> str:
@@ -101,7 +132,8 @@ def cmd_list(args) -> int:
     width = max(len(str(p["id"])) for p in problems)
     for p in problems:
         flag = "" if p["has_input"] else "  (入力なし)"
-        print(f"{str(p['id']).rjust(width)}  {p['date']}  [{p['difficulty']}]  {p['title']}{flag}")
+        date_str = _with_weekday(p["date"])
+        print(f"{str(p['id']).rjust(width)}  {date_str}  [{p['difficulty']}]  {p['title']}{flag}")
     return 0
 
 
@@ -133,9 +165,9 @@ def cmd_submit(args) -> int:
 
 
 def _print_authored(p: dict) -> None:
-    date = p.get("date") or "(未定・キュー)"
+    date_str = _with_weekday(p["date"]) if p.get("date") else "(未定・キュー)"
     flag = "" if p.get("has_input") else "  (入力なし)"
-    print(f"#{p['id']}  [{p['status']}]  {date}  [{p['difficulty']}]  {p['title']}{flag}")
+    print(f"#{p['id']}  [{p['status']}]  {date_str}  [{p['difficulty']}]  {p['title']}{flag}")
 
 
 def cmd_create(args) -> int:
@@ -172,8 +204,17 @@ def cmd_mine(args) -> int:
     if not problems:
         print("作成した問題はありません。")
         return 0
+    rows = []
     for p in problems:
-        _print_authored(p)
+        rows.append([
+            f"#{p['id']}",
+            STATUS_LABELS.get(p.get("status"), p.get("status") or ""),
+            _with_weekday(p["date"]) if p.get("date") else "—",
+            p.get("difficulty") or "",
+            "あり" if p.get("has_input") else "なし",
+            p["title"],
+        ])
+    _print_table(["ID", "状態", "公開日", "難易度", "入力", "タイトル"], rows)
     return 0
 
 
@@ -232,20 +273,20 @@ def cmd_delete(args) -> int:
 
 def cmd_open_dates(args) -> int:
     client = _client_from_config(cfg.load())
-    if args.next:
-        result = client.next_open_dates(from_date=args.from_date or "", count=args.count)
-        dates = result.get("dates", [])
-        label = f"{result.get('from', '')} 以降"
-    else:
-        result = client.open_dates(month=args.month or "")
+    if args.month:  # 月指定があれば当該月の空き日程、なければ直近を表示
+        result = client.open_dates(month=args.month)
         dates = result.get("dates", [])
         label = result.get("month", "")
+    else:
+        result = client.next_open_dates(from_date=args.from_date or "", count=args.count)
+        dates = result.get("dates", [])
+        label = f"{_with_weekday(result.get('from', ''))} 以降"
     if not dates:
         print(f"{label}: 空き日程はありません。")
         return 0
     print(f"{label} の空き日程:")
     for d in dates:
-        print(f"  {d}")
+        print(f"  {_with_weekday(d)}")
     return 0
 
 
@@ -328,11 +369,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_delete.add_argument("-y", "--yes", action="store_true", help="確認プロンプトをスキップ")
     p_delete.set_defaults(func=cmd_delete)
 
-    p_dates = sub.add_parser("open-dates", help="問題が割り当てられていない空き日程 (作問者用)")
-    p_dates.add_argument("--month", help="対象月 YYYY-MM (既定: 当月)")
-    p_dates.add_argument("--next", action="store_true", help="直近の空き日程を表示")
-    p_dates.add_argument("--from", dest="from_date", help="--next の起点日 YYYY-MM-DD (既定: 今日)")
-    p_dates.add_argument("--count", type=int, help="--next で表示する日数 (1-366, 既定: 7)")
+    p_dates = sub.add_parser(
+        "open-dates",
+        help="空き日程 (既定: 直近の空き日程。--month で月単位表示・作問者用)",
+    )
+    p_dates.add_argument("--month", help="対象月 YYYY-MM を月単位で表示 (省略時は直近)")
+    p_dates.add_argument("--from", dest="from_date", help="直近表示の起点日 YYYY-MM-DD (既定: 今日)")
+    p_dates.add_argument("--count", type=int, help="直近表示する日数 (1-366, 既定: 7)")
     p_dates.set_defaults(func=cmd_open_dates)
 
     return parser
