@@ -91,6 +91,94 @@ def test_submit_missing_file(stub_server, capsys):
     assert "見つかりません" in capsys.readouterr().err
 
 
+def test_create_with_answer_file(stub_server, tmp_path, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    answer = tmp_path / "expected.txt"
+    answer.write_bytes(b"42\n")
+    statement = tmp_path / "statement.md"
+    statement.write_text("2 数の和を求めよ。", encoding="utf-8")
+    rc = main([
+        "create", "--title", "Sum", "--statement-file", str(statement),
+        "--answer", str(answer), "--difficulty", "Easy", "--date", "2026-07-03",
+    ])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "作成しました" in out
+    assert "#7" in out and "Sum" in out and "2026-07-03" in out
+
+
+def test_create_requires_answer(stub_server, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    rc = main(["create", "--title", "X", "--statement", "hi"])
+    assert rc == 2
+    assert "想定出力" in capsys.readouterr().err
+
+
+def test_create_rejects_bad_hash(stub_server, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    rc = main(["create", "--title", "X", "--statement", "hi", "--answer-sha256", "zzz"])
+    assert rc == 2
+    assert "16 進数" in capsys.readouterr().err
+
+
+def test_mine_lists_all_statuses(stub_server, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    assert main(["mine"]) == 0
+    out = capsys.readouterr().out
+    assert "queued" in out and "published" in out
+    assert "(未定・キュー)" in out  # a queued problem has no date
+
+
+def test_edit_requires_a_change(stub_server, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    assert main(["edit", "7"]) == 2
+    assert "1 つ以上" in capsys.readouterr().err
+
+
+def test_edit_queue_reverts_date(stub_server, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    assert main(["edit", "7", "--queue"]) == 0
+    out = capsys.readouterr().out
+    assert "更新しました" in out and "queued" in out
+
+
+def test_delete_with_yes(stub_server, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    assert main(["rm", "7", "--yes"]) == 0
+    assert "削除しました" in capsys.readouterr().out
+
+
+def test_delete_aborts_on_no(stub_server, capsys, monkeypatch):
+    _login(stub_server)
+    capsys.readouterr()
+    monkeypatch.setattr("builtins.input", lambda *a: "n")
+    assert main(["rm", "7"]) == 1
+    assert "中止" in capsys.readouterr().out
+
+
+def test_open_dates_month(stub_server, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    assert main(["open-dates", "--month", "2026-07"]) == 0
+    out = capsys.readouterr().out
+    assert "2026-07" in out and "2026-07-03" in out
+
+
+def test_open_dates_next(stub_server, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    assert main(["open-dates", "--next", "--count", "2"]) == 0
+    out = capsys.readouterr().out
+    assert "2026-07-01 以降" in out and "2026-07-05" in out
+
+
 def test_connection_error_is_clean(capsys, monkeypatch, tmp_path):
     """A dead server surfaces a friendly error, not a traceback."""
     monkeypatch.setenv("DAILY_CONFIG", str(tmp_path / "config.toml"))

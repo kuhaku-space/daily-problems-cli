@@ -55,6 +55,42 @@ class _Handler(BaseHTTPRequestHandler):
             ok = submitted == ANSWER_HASH
             self._send_json(200, {"correct": ok, "result": "AC" if ok else "WA"})
             return
+        if self.path == "/api/problems":  # create
+            if not self._authed():
+                self._send_json(401, {"error": "認証が必要です。"})
+                return
+            data = self._read_json()
+            self._send_json(201, {
+                "id": 7,
+                "title": data.get("title"),
+                "difficulty": data.get("difficulty") or "Medium",
+                "status": "scheduled" if data.get("date") else "queued",
+                "date": data.get("date") or None,
+                "input_filename": data.get("input_filename"),
+                "has_input": bool(data.get("input")),
+            })
+            return
+        if self.path == "/api/problems/7/edit":
+            if not self._authed():
+                self._send_json(401, {"error": "認証が必要です。"})
+                return
+            data = self._read_json()
+            self._send_json(200, {
+                "id": 7,
+                "title": data.get("title") or "Sum",
+                "difficulty": data.get("difficulty") or "Medium",
+                "status": "queued" if data.get("date") == "" else "scheduled",
+                "date": data.get("date") or None,
+                "input_filename": None if data.get("remove_input") else "in.txt",
+                "has_input": not data.get("remove_input"),
+            })
+            return
+        if self.path == "/api/problems/7/delete":
+            if not self._authed():
+                self._send_json(401, {"error": "認証が必要です。"})
+                return
+            self._send_json(200, {"deleted": True})
+            return
         self._send_json(404, {"error": "not found"})
 
     def do_GET(self) -> None:
@@ -66,6 +102,32 @@ class _Handler(BaseHTTPRequestHandler):
                 {"id": 1, "date": "2026-06-01", "title": "Sum",
                  "difficulty": "Easy", "input_filename": "in.txt", "has_input": True},
             ]})
+            return
+        if self.path == "/api/problems/mine":
+            if not self._authed():
+                self._send_json(401, {"error": "認証が必要です。"})
+                return
+            self._send_json(200, {"problems": [
+                {"id": 7, "title": "Draft", "difficulty": "Hard", "status": "queued",
+                 "date": None, "input_filename": None, "has_input": False},
+                {"id": 1, "title": "Sum", "difficulty": "Easy", "status": "published",
+                 "date": "2026-06-01", "input_filename": "in.txt", "has_input": True},
+            ]})
+            return
+        if self.path.startswith("/api/problems/open-dates/next"):
+            if not self._authed():
+                self._send_json(401, {"error": "認証が必要です。"})
+                return
+            self._send_json(200, {
+                "from": "2026-07-01", "count": 2,
+                "dates": ["2026-07-03", "2026-07-05"],
+            })
+            return
+        if self.path.startswith("/api/problems/open-dates"):
+            if not self._authed():
+                self._send_json(401, {"error": "認証が必要です。"})
+                return
+            self._send_json(200, {"month": "2026-07", "dates": ["2026-07-03", "2026-07-05"]})
             return
         if self.path == "/api/inputs/1":
             if not self._authed():

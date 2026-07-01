@@ -89,6 +89,34 @@ daily submit 12 output.txt                                     # output.txt の 
 - `submit` は出力ファイルの SHA-256 を CLI 側で計算して送ります。正解(AC)なら終了コード 0、不正解(WA)なら 1。
 - トークンは Daily Problems のプロフィールページ「API トークン」からも発行・失効できます。
 
+### 作問者向けコマンド
+
+問題の作成・管理を行うコマンドです（利用には作問権限が必要です）。
+
+```bash
+# 問題を作成する。問題文はファイルから、想定出力は SHA-256 を CLI 側で計算
+daily create --title "Two Sum" \
+             --statement-file statement.md \
+             --answer expected_output.txt \
+             --input sample_input.txt \
+             --difficulty Easy \
+             --date 2026-07-03            # --date を省くとリリースキューに入る
+
+daily mine                                # 自分が作成した問題を全ステータス表示
+daily edit 12 --difficulty Hard           # 一部だけ更新（指定した項目のみ変更）
+daily edit 12 --queue                     # 公開日を外してリリースキューに戻す
+daily edit 12 --remove-input              # 入力ファイルを削除
+daily rm 12                               # 削除（確認あり。-y で確認をスキップ）
+daily open-dates                          # 当月の空き日程
+daily open-dates --month 2026-08          # 指定月の空き日程
+daily open-dates --next --count 14        # 今日以降の空き日程を最大14件
+```
+
+- `create` / `edit` の想定出力は `--answer <ファイル>`（SHA-256 を計算）か `--answer-sha256 <64桁の16進>` のどちらかで指定します。問題文・解説はそれぞれ `--statement` / `--statement-file`、`--editorial` / `--editorial-file` でインライン・ファイルのどちらでも渡せます。
+- `--input` を指定すると入力ファイルの内容が送信され、ダウンロード名は既定でそのファイル名になります（`--input-filename` で上書き可）。
+- `edit` は指定したフラグの項目だけを更新します。`rm`（別名 `delete`）はキュー中または未来日の問題のみ削除できます。
+- `new` は `create` の、`delete` は `rm` の別名です。
+
 ## 設定
 
 設定は `$DAILY_CONFIG`(既定 `~/.config/daily/config.toml`、`$XDG_CONFIG_HOME` を尊重)に保存されます。

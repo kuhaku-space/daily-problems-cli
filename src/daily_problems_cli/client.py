@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
@@ -63,6 +64,40 @@ class Client:
             "POST", f"/api/submit/{problem_id}",
             json_body={"hash": sha256, "code": code},
         )
+
+    # --- 作問者向け (authoring) -------------------------------------------
+
+    def create_problem(self, payload: dict) -> dict:
+        """Create a problem. ``payload`` carries only the keys the caller set."""
+        return self._json("POST", "/api/problems", json_body=payload)
+
+    def authored_problems(self) -> list[dict]:
+        """List problems authored by the current user (all statuses)."""
+        return self._json("GET", "/api/problems/mine").get("problems", [])
+
+    def update_problem(self, problem_id: int, payload: dict) -> dict:
+        """Partially update a problem; ``payload`` holds only changed keys."""
+        return self._json("POST", f"/api/problems/{problem_id}/edit", json_body=payload)
+
+    def delete_problem(self, problem_id: int) -> dict:
+        return self._json("POST", f"/api/problems/{problem_id}/delete")
+
+    def open_dates(self, month: str = "") -> dict:
+        """Dates in ``month`` (YYYY-MM, defaults to current) with no problem."""
+        query = urllib.parse.urlencode({"month": month}) if month else ""
+        path = "/api/problems/open-dates" + (f"?{query}" if query else "")
+        return self._json("GET", path)
+
+    def next_open_dates(self, from_date: str = "", count: int | None = None) -> dict:
+        """The next open dates starting at ``from_date`` (default today)."""
+        params = {}
+        if from_date:
+            params["from"] = from_date
+        if count is not None:
+            params["count"] = count
+        query = urllib.parse.urlencode(params)
+        path = "/api/problems/open-dates/next" + (f"?{query}" if query else "")
+        return self._json("GET", path)
 
     def download_input(self, problem_id: int) -> tuple[bytes, str]:
         """Return (content, suggested_filename) for a problem's input file."""
