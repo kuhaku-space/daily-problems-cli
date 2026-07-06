@@ -40,6 +40,14 @@ def test_list(stub_server, capsys):
     assert "Sum" in out and "Easy" in out
 
 
+def test_l_alias_lists_problems(stub_server, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    assert main(["l"]) == 0
+    out = capsys.readouterr().out
+    assert "Sum" in out and "Easy" in out
+
+
 def test_get_downloads_input(stub_server, tmp_path, capsys):
     _login(stub_server)
     dest = tmp_path / "in.txt"
@@ -59,6 +67,13 @@ def test_download_alias_downloads_input(stub_server, tmp_path, capsys):
     _login(stub_server)
     dest = tmp_path / "downloaded.txt"
     assert main(["download", "1", "-o", str(dest)]) == 0
+    assert dest.read_bytes() == INPUT_BYTES
+
+
+def test_d_alias_downloads_input(stub_server, tmp_path, capsys):
+    _login(stub_server)
+    dest = tmp_path / "d.txt"
+    assert main(["d", "1", "-o", str(dest)]) == 0
     assert dest.read_bytes() == INPUT_BYTES
 
 
@@ -84,6 +99,16 @@ def test_submit_wrong_then_correct(stub_server, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "AC" in out
     assert ANSWER_HASH in out  # the computed hash is shown
+
+
+def test_s_alias_submits_output(stub_server, tmp_path, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+
+    correct = tmp_path / "ok.txt"
+    correct.write_bytes(b"42\n")
+    assert main(["s", "1", str(correct)]) == 0
+    assert "AC" in capsys.readouterr().out
 
 
 def test_submit_without_id_submits_to_todays_problem(stub_server, tmp_path, capsys, monkeypatch):

@@ -2,11 +2,11 @@
 
 Commands:
   daily login [--server URL] [--username U] [--label L]   authenticate, store token
-  daily list                                              list today's problems
+  daily list | l                                          list today's problems
   daily get [<id>] [-o DIR|FILE]                          download a problem's input
-  daily download [<id>] [-o DIR|FILE]                     same as get
+  daily download | d [<id>] [-o DIR|FILE]                 same as get
   daily dl [<id>] [-o DIR|FILE]                           same as get
-  daily submit [<id>] <outfile> [--code FILE]             hash & submit an output file
+  daily submit | s [<id>] <outfile> [--code FILE]         hash & submit an output file
 
 Authoring commands (作問者用):
   daily create --title T (--statement TEXT|--statement-file F) \
@@ -336,7 +336,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_login.add_argument("--label", default="cli", help="トークンのラベル")
     p_login.set_defaults(func=cmd_login)
 
-    p_list = sub.add_parser("list", help="公開中の問題一覧")
+    p_list = sub.add_parser("list", aliases=["l"], help="公開中の問題一覧")
     p_list.set_defaults(func=cmd_list)
 
     p_get = sub.add_parser("get", help="入力ファイルをダウンロード")
@@ -344,7 +344,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_get.add_argument("-o", "--output", help="保存先のファイルまたはディレクトリ")
     p_get.set_defaults(func=cmd_get)
 
-    p_download = sub.add_parser("download", help="入力ファイルをダウンロード")
+    p_download = sub.add_parser("download", aliases=["d"], help="入力ファイルをダウンロード")
     p_download.add_argument("problem_id", type=int, nargs="?")
     p_download.add_argument("-o", "--output", help="保存先のファイルまたはディレクトリ")
     p_download.set_defaults(func=cmd_get)
@@ -354,7 +354,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_dl.add_argument("-o", "--output", help="保存先のファイルまたはディレクトリ")
     p_dl.set_defaults(func=cmd_get)
 
-    p_submit = sub.add_parser("submit", help="出力ファイルのハッシュを計算して提出")
+    p_submit = sub.add_parser("submit", aliases=["s"], help="出力ファイルのハッシュを計算して提出")
     p_submit.add_argument("submit_args", nargs="+", metavar="problem_id/outfile")
     p_submit.add_argument("--code", help="一緒に保存するソースコードのファイル")
     p_submit.set_defaults(func=cmd_submit)
