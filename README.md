@@ -80,12 +80,15 @@ pkgs.mkShell {
 daily login --server https://your-daily-problems.example.com   # ログインしてトークンを保存
 daily list                                                     # 公開中の問題一覧
 daily get 12 -o input.txt                                      # 問題12の入力をダウンロード
+daily get -o input.txt                                         # 当日の問題の入力をダウンロード
 daily download 12 -o input.txt                                 # get と同じ
 daily dl 12 -o input.txt                                       # get と同じ
 daily submit 12 output.txt                                     # output.txt の SHA-256 を計算して提出
+daily submit output.txt                                        # 当日の問題に提出
 ```
 
 - `login` はトークンを発行して設定ファイルに保存します。ユーザー名・パスワードは省略するとプロンプトで尋ねます。
+- `get` / `download` / `dl` / `submit` は問題番号を省略すると、当日の問題を対象にします。
 - `submit` は出力ファイルの SHA-256 を CLI 側で計算して送ります。正解(AC)なら終了コード 0、不正解(WA)なら 1。
 - トークンは Daily Problems のプロフィールページ「API トークン」からも発行・失効できます。
 

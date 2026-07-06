@@ -3,10 +3,10 @@
 Commands:
   daily login [--server URL] [--username U] [--label L]   authenticate, store token
   daily list                                              list today's problems
-  daily get <id> [-o DIR|FILE]                            download a problem's input
-  daily download <id> [-o DIR|FILE]                       same as get
-  daily dl <id> [-o DIR|FILE]                             same as get
-  daily submit <id> <outfile> [--code FILE]               hash & submit an output file
+  daily get [<id>] [-o DIR|FILE]                          download a problem's input
+  daily download [<id>] [-o DIR|FILE]                     same as get
+  daily dl [<id>] [-o DIR|FILE]                           same as get
+  daily submit [<id>] <outfile> [--code FILE]             hash & submit an output file
 
 Authoring commands (作問者用):
   daily create --title T (--statement TEXT|--statement-file F) \
@@ -112,6 +112,38 @@ def _client_from_config(config: cfg.Config) -> Client:
     return Client(config.server, config.token)
 
 
+def _today_iso() -> str:
+    return date.today().isoformat()
+
+
+def _today_problem_id(client: Client) -> int:
+    today = _today_iso()
+    matches = [p for p in client.problems() if p.get("date") == today]
+    if not matches:
+        raise ApiError(f"今日 ({_with_weekday(today)}) の問題が見つかりません。問題番号を指定してください。")
+    if len(matches) > 1:
+        ids = ", ".join(f"#{p['id']}" for p in matches)
+        raise ApiError(f"今日 ({_with_weekday(today)}) の問題が複数見つかりました: {ids}")
+    return int(matches[0]["id"])
+
+
+def _problem_id_or_today(client: Client, problem_id: int | None) -> int:
+    if problem_id is not None:
+        return problem_id
+    return _today_problem_id(client)
+
+
+def _submit_target(values: list[str]) -> tuple[int | None, str]:
+    if len(values) == 1:
+        return None, values[0]
+    if len(values) == 2:
+        try:
+            return int(values[0]), values[1]
+        except ValueError as exc:
+            raise ApiError("問題番号は整数で指定してください。") from exc
+    raise ApiError("submit は `daily submit [問題番号] 出力ファイル` の形式で指定してください。")
+
+
 def cmd_login(args) -> int:
     server = (args.server or cfg.load().server or "http://127.0.0.1:8000").rstrip("/")
     username = args.username or input("ユーザー名: ").strip()
@@ -139,10 +171,11 @@ def cmd_list(args) -> int:
 
 def cmd_get(args) -> int:
     client = _client_from_config(cfg.load())
-    content, suggested = client.download_input(args.problem_id)
-    out = Path(args.output) if args.output else Path(suggested or f"input_{args.problem_id}.txt")
+    problem_id = _problem_id_or_today(client, args.problem_id)
+    content, suggested = client.download_input(problem_id)
+    out = Path(args.output) if args.output else Path(suggested or f"input_{problem_id}.txt")
     if out.is_dir():
-        out = out / (suggested or f"input_{args.problem_id}.txt")
+        out = out / (suggested or f"input_{problem_id}.txt")
     out.write_bytes(content)
     print(f"入力を {out} に保存しました ({len(content)} bytes)。")
     return 0
@@ -150,7 +183,9 @@ def cmd_get(args) -> int:
 
 def cmd_submit(args) -> int:
     client = _client_from_config(cfg.load())
-    outfile = Path(args.outfile)
+    problem_id, outfile_arg = _submit_target(args.submit_args)
+    problem_id = _problem_id_or_today(client, problem_id)
+    outfile = Path(outfile_arg)
     if not outfile.is_file():
         raise ApiError(f"出力ファイルが見つかりません: {outfile}")
     digest = _sha256_file(outfile)
@@ -158,7 +193,7 @@ def cmd_submit(args) -> int:
     if args.code:
         code = Path(args.code).read_text(encoding="utf-8", errors="replace")
     print(f"sha256({outfile.name}) = {digest}")
-    result = client.submit(args.problem_id, digest, code=code)
+    result = client.submit(problem_id, digest, code=code)
     verdict = result["result"]
     print(f"=> {verdict}" + (" ✅" if result["correct"] else " ❌"))
     return 0 if result["correct"] else 1
@@ -305,23 +340,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_list.set_defaults(func=cmd_list)
 
     p_get = sub.add_parser("get", help="入力ファイルをダウンロード")
-    p_get.add_argument("problem_id", type=int)
+    p_get.add_argument("problem_id", type=int, nargs="?")
     p_get.add_argument("-o", "--output", help="保存先のファイルまたはディレクトリ")
     p_get.set_defaults(func=cmd_get)
 
     p_download = sub.add_parser("download", help="入力ファイルをダウンロード")
-    p_download.add_argument("problem_id", type=int)
+    p_download.add_argument("problem_id", type=int, nargs="?")
     p_download.add_argument("-o", "--output", help="保存先のファイルまたはディレクトリ")
     p_download.set_defaults(func=cmd_get)
 
     p_dl = sub.add_parser("dl", help="入力ファイルをダウンロード")
-    p_dl.add_argument("problem_id", type=int)
+    p_dl.add_argument("problem_id", type=int, nargs="?")
     p_dl.add_argument("-o", "--output", help="保存先のファイルまたはディレクトリ")
     p_dl.set_defaults(func=cmd_get)
 
     p_submit = sub.add_parser("submit", help="出力ファイルのハッシュを計算して提出")
-    p_submit.add_argument("problem_id", type=int)
-    p_submit.add_argument("outfile", help="提出する出力ファイル")
+    p_submit.add_argument("submit_args", nargs="+", metavar="problem_id/outfile")
     p_submit.add_argument("--code", help="一緒に保存するソースコードのファイル")
     p_submit.set_defaults(func=cmd_submit)
 

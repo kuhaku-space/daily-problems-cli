@@ -47,6 +47,14 @@ def test_get_downloads_input(stub_server, tmp_path, capsys):
     assert dest.read_bytes() == INPUT_BYTES
 
 
+def test_get_without_id_downloads_todays_input(stub_server, tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr("daily_problems_cli.__main__._today_iso", lambda: "2026-06-01")
+    _login(stub_server)
+    dest = tmp_path / "today.txt"
+    assert main(["get", "-o", str(dest)]) == 0
+    assert dest.read_bytes() == INPUT_BYTES
+
+
 def test_download_alias_downloads_input(stub_server, tmp_path, capsys):
     _login(stub_server)
     dest = tmp_path / "downloaded.txt"
@@ -76,6 +84,27 @@ def test_submit_wrong_then_correct(stub_server, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "AC" in out
     assert ANSWER_HASH in out  # the computed hash is shown
+
+
+def test_submit_without_id_submits_to_todays_problem(stub_server, tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr("daily_problems_cli.__main__._today_iso", lambda: "2026-06-01")
+    _login(stub_server)
+    capsys.readouterr()
+
+    correct = tmp_path / "ok.txt"
+    correct.write_bytes(b"42\n")
+    assert main(["submit", str(correct)]) == 0
+    assert "AC" in capsys.readouterr().out
+
+
+def test_missing_todays_problem_errors(stub_server, tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr("daily_problems_cli.__main__._today_iso", lambda: "2026-07-06")
+    _login(stub_server)
+    capsys.readouterr()
+
+    assert main(["get"]) == 2
+    err = capsys.readouterr().err
+    assert "今日" in err and "問題番号を指定" in err
 
 
 def test_commands_require_login(capsys):
