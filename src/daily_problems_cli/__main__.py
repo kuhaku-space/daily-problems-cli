@@ -1,7 +1,7 @@
 """``daily`` CLI entry point.
 
 Commands:
-  daily login [--server URL] [--username U] [--label L]   authenticate, store token
+  daily login [--server URL] [--token TOKEN]              store an API token (issue one on your profile page)
   daily list | l                                          list today's problems
   daily get [<id>] [-o DIR|FILE]                          download a problem's input
   daily download | d [<id>] [-o DIR|FILE]                 same as get
@@ -146,12 +146,16 @@ def _submit_target(values: list[str]) -> tuple[int | None, str]:
 
 def cmd_login(args) -> int:
     server = (args.server or cfg.load().server or "http://127.0.0.1:8000").rstrip("/")
-    username = args.username or input("ユーザー名: ").strip()
-    password = args.password or getpass.getpass("パスワード: ")
-    client = Client(server)
-    result = client.login(username, password, label=args.label)
-    saved = cfg.save(cfg.Config(server=server, token=result["token"]))
-    print(f"{result['username']} としてログインしました。トークンを {saved} に保存しました。")
+    token = (args.token or getpass.getpass("APIトークン: ")).strip()
+    client = Client(server, token)
+    try:
+        client.problems()
+    except ApiError as exc:
+        if exc.status == 401:
+            raise ApiError("トークンが無効です。プロフィールページで発行し直してください。") from exc
+        raise
+    saved = cfg.save(cfg.Config(server=server, token=token))
+    print(f"トークンを {saved} に保存しました。")
     return 0
 
 
@@ -329,11 +333,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="daily", description="Daily Problems CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_login = sub.add_parser("login", help="ログインしてトークンを保存")
+    p_login = sub.add_parser("login", help="APIトークンを保存")
     p_login.add_argument("--server", help="サーバーURL (例: http://127.0.0.1:8000)")
-    p_login.add_argument("--username", help="ユーザー名 (省略時はプロンプト)")
-    p_login.add_argument("--password", help="パスワード (省略時はプロンプト)")
-    p_login.add_argument("--label", default="cli", help="トークンのラベル")
+    p_login.add_argument("--token", help="APIトークン (省略時はプロンプト)")
     p_login.set_defaults(func=cmd_login)
 
     p_list = sub.add_parser("list", aliases=["l"], help="公開中の問題一覧")

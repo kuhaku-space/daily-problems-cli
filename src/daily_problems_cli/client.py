@@ -50,12 +50,6 @@ class Client:
             raise ApiError(message or f"HTTP {status}", status)
         return payload
 
-    def login(self, username: str, password: str, label: str = "cli") -> dict:
-        return self._json(
-            "POST", "/api/login",
-            json_body={"username": username, "password": password, "label": label},
-        )
-
     def problems(self) -> list[dict]:
         return self._json("GET", "/api/problems").get("problems", [])
 

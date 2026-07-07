@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import ANSWER_HASH, INPUT_BYTES
+from conftest import ANSWER_HASH, INPUT_BYTES, VALID_TOKEN
 from daily_problems_cli import config as cli_config
 from daily_problems_cli.__main__ import main
 
@@ -14,20 +14,20 @@ def _isolated_config(monkeypatch, tmp_path):
 
 
 def _login(server: str) -> int:
-    return main(["login", "--server", server, "--username", "alice", "--password", "password1"])
+    return main(["login", "--server", server, "--token", VALID_TOKEN])
 
 
 def test_login_persists_token(stub_server, capsys):
     assert _login(stub_server) == 0
     out = capsys.readouterr().out
-    assert "ログインしました" in out
+    assert "保存しました" in out
     saved = cli_config.load()
     assert saved.server == stub_server
-    assert saved.token
+    assert saved.token == VALID_TOKEN
 
 
-def test_login_wrong_password_errors(stub_server, capsys):
-    rc = main(["login", "--server", stub_server, "--username", "alice", "--password", "nope"])
+def test_login_invalid_token_errors(stub_server, capsys):
+    rc = main(["login", "--server", stub_server, "--token", "wrong-token"])
     assert rc == 2
     assert "エラー" in capsys.readouterr().err
 

@@ -1,8 +1,10 @@
 """A stub Daily Problems API server (stdlib http.server) so the CLI can be
 tested end-to-end over real HTTP without the Flask application.
 
-It implements just enough of the JSON API: token login, problem listing, input
-download, and submit (compares against a fixed answer hash)."""
+It implements just enough of the JSON API: bearer-token auth, problem listing,
+input download, and submit (compares against a fixed answer hash). Tokens are
+issued out-of-band (there is no password-login endpoint), so tests use
+``VALID_TOKEN`` directly."""
 from __future__ import annotations
 
 import hashlib
@@ -41,11 +43,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if self.path == "/api/login":
-            data = self._read_json()
-            if data.get("username") == "alice" and data.get("password") == "password1":
-                self._send_json(200, {"token": VALID_TOKEN, "username": "alice"})
-            else:
-                self._send_json(401, {"error": "ユーザー名またはパスワードが違います。"})
+            self._send_json(410, {"error": "パスワードによるAPIトークン発行は廃止済みです。"})
             return
         if self.path == "/api/submit/1":
             if not self._authed():
