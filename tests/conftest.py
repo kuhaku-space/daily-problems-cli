@@ -17,6 +17,8 @@ import pytest
 VALID_TOKEN = "test-token-123"
 ANSWER = b"42\n"
 ANSWER_HASH = hashlib.sha256(ANSWER).hexdigest()
+TOKEN_ANSWER = b"42"
+TOKEN_ANSWER_HASH = hashlib.sha256(TOKEN_ANSWER).hexdigest()
 INPUT_BYTES = b"5\n37\n"
 
 
@@ -45,12 +47,13 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path == "/api/login":
             self._send_json(410, {"error": "パスワードによるAPIトークン発行は廃止済みです。"})
             return
-        if self.path == "/api/submit/1":
+        if self.path in {"/api/submit/1", "/api/submit/2"}:
             if not self._authed():
                 self._send_json(401, {"error": "認証が必要です。"})
                 return
             submitted = (self._read_json().get("hash") or "").lower()
-            ok = submitted == ANSWER_HASH
+            expected = ANSWER_HASH if self.path.endswith("/1") else TOKEN_ANSWER_HASH
+            ok = submitted == expected
             self._send_json(200, {"correct": ok, "result": "AC" if ok else "WA"})
             return
         if self.path == "/api/problems":  # create
@@ -98,7 +101,11 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             self._send_json(200, {"problems": [
                 {"id": 1, "date": "2026-06-01", "title": "Sum",
-                 "difficulty": "Easy", "input_filename": "in.txt", "has_input": True},
+                 "difficulty": "Easy", "input_filename": "in.txt", "has_input": True,
+                 "output_formatter": "identity-v1"},
+                {"id": 2, "date": "2026-06-02", "title": "Token Sum",
+                 "difficulty": "Easy", "input_filename": None, "has_input": False,
+                 "output_formatter": "tokens-v1"},
             ]})
             return
         if self.path == "/api/problems/mine":
@@ -107,9 +114,11 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             self._send_json(200, {"problems": [
                 {"id": 7, "title": "Draft", "difficulty": "Hard", "status": "queued",
-                 "date": None, "input_filename": None, "has_input": False},
+                 "date": None, "input_filename": None, "has_input": False,
+                 "output_formatter": "tokens-v1"},
                 {"id": 1, "title": "Sum", "difficulty": "Easy", "status": "published",
-                 "date": "2026-06-01", "input_filename": "in.txt", "has_input": True},
+                 "date": "2026-06-01", "input_filename": "in.txt", "has_input": True,
+                 "output_formatter": "identity-v1"},
             ]})
             return
         if self.path.startswith("/api/problems/open-dates/next"):

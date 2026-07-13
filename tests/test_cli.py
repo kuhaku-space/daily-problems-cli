@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import ANSWER_HASH, INPUT_BYTES, VALID_TOKEN
+from conftest import ANSWER_HASH, INPUT_BYTES, TOKEN_ANSWER_HASH, VALID_TOKEN
 from daily_problems_cli import config as cli_config
 from daily_problems_cli.__main__ import main
 
@@ -111,6 +111,16 @@ def test_s_alias_submits_output(stub_server, tmp_path, capsys):
     assert "AC" in capsys.readouterr().out
 
 
+def test_submit_normalizes_using_problem_formatter(stub_server, tmp_path, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    output = tmp_path / "answer.txt"
+    output.write_bytes(b"  42\r\n")
+    assert main(["submit", "2", str(output)]) == 0
+    out = capsys.readouterr().out
+    assert "tokens-v1" in out and TOKEN_ANSWER_HASH in out
+
+
 def test_submit_without_id_submits_to_todays_problem(stub_server, tmp_path, capsys, monkeypatch):
     monkeypatch.setattr("daily_problems_cli.__main__._today_iso", lambda: "2026-06-01")
     _login(stub_server)
@@ -168,6 +178,24 @@ def test_create_requires_answer(stub_server, capsys):
     rc = main(["create", "--title", "X", "--statement", "hi"])
     assert rc == 2
     assert "想定出力" in capsys.readouterr().err
+
+
+def test_create_hashes_answer_with_selected_formatter(stub_server, tmp_path, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    answer = tmp_path / "expected.txt"
+    answer.write_bytes(b"  Yes\r\nNO  ")
+    assert main([
+        "create", "--title", "X", "--statement", "hi", "--answer", str(answer),
+        "--output-formatter", "yesno-v1",
+    ]) == 0
+
+
+def test_edit_formatter_requires_rehashed_answer(stub_server, capsys):
+    _login(stub_server)
+    capsys.readouterr()
+    assert main(["edit", "7", "--output-formatter", "tokens-v1"]) == 2
+    assert "--answer" in capsys.readouterr().err
 
 
 def test_create_rejects_bad_hash(stub_server, capsys):

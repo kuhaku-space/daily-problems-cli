@@ -6,7 +6,7 @@ Commands:
   daily get [<id>] [-o DIR|FILE]                          download a problem's input
   daily download | d [<id>] [-o DIR|FILE]                 same as get
   daily dl [<id>] [-o DIR|FILE]                           same as get
-  daily submit | s [<id>] <outfile> [--code FILE]         hash & submit an output file
+  daily submit | s [<id>] <outfile> [--code FILE]         normalize, hash & submit an output file
 
 Authoring commands (作問者用):
   daily create --title T (--statement TEXT|--statement-file F) \
@@ -29,6 +29,7 @@ from pathlib import Path
 
 from . import config as cfg
 from .client import ApiError, Client
+from .output_formatters import OUTPUT_FORMATTERS, format_output_for_hash
 
 
 DIFFICULTIES = ["Easy", "Medium", "Hard", "Expert"]
@@ -63,11 +64,14 @@ def _print_table(header: list[str], rows: list[list[str]]) -> None:
         print("  ".join(_pad(cell, widths[i]) for i, cell in enumerate(row)).rstrip())
 
 
-def _sha256_file(path: Path) -> str:
+def _sha256_file(path: Path, formatter: str = "identity-v1") -> str:
     h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
+    try:
+        h.update(format_output_for_hash(path.read_bytes(), formatter))
+    except UnicodeDecodeError as exc:
+        raise ApiError(f"{formatter} は UTF-8 の出力ファイルでのみ使えます: {path}") from exc
+    except ValueError as exc:
+        raise ApiError(str(exc)) from exc
     return h.hexdigest()
 
 
@@ -78,7 +82,9 @@ def _read_text(path: str) -> str:
     return file.read_text(encoding="utf-8")
 
 
-def _resolve_answer_hash(answer_file: str | None, answer_sha256: str | None) -> str | None:
+def _resolve_answer_hash(
+    answer_file: str | None, answer_sha256: str | None, formatter: str = "identity-v1"
+) -> str | None:
     """Turn the two answer flags into a hash, or None if neither was given.
 
     ``--answer`` names an expected-output file whose sha256 we compute (like
@@ -89,7 +95,7 @@ def _resolve_answer_hash(answer_file: str | None, answer_sha256: str | None) -> 
         file = Path(answer_file)
         if not file.is_file():
             raise ApiError(f"想定出力ファイルが見つかりません: {file}")
-        return _sha256_file(file)
+        return _sha256_file(file, formatter)
     if answer_sha256:
         digest = answer_sha256.strip().lower()
         if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
@@ -131,6 +137,18 @@ def _problem_id_or_today(client: Client, problem_id: int | None) -> int:
     if problem_id is not None:
         return problem_id
     return _today_problem_id(client)
+
+
+def _output_formatter(client: Client, problem_id: int, *, authored: bool = False) -> str:
+    """Look up a formatter; old servers omit it and therefore mean identity."""
+    problems = client.authored_problems() if authored else client.problems()
+    problem = next((p for p in problems if p.get("id") == problem_id), None)
+    if problem is None:
+        raise ApiError(f"問題 #{problem_id} が見つかりません。")
+    formatter = problem.get("output_formatter", "identity-v1")
+    if formatter not in OUTPUT_FORMATTERS:
+        raise ApiError(f"問題 #{problem_id} の出力フォーマッタに対応していません: {formatter}")
+    return formatter
 
 
 def _submit_target(values: list[str]) -> tuple[int | None, str]:
@@ -192,11 +210,12 @@ def cmd_submit(args) -> int:
     outfile = Path(outfile_arg)
     if not outfile.is_file():
         raise ApiError(f"出力ファイルが見つかりません: {outfile}")
-    digest = _sha256_file(outfile)
+    formatter = _output_formatter(client, problem_id)
+    digest = _sha256_file(outfile, formatter)
     code = ""
     if args.code:
         code = Path(args.code).read_text(encoding="utf-8", errors="replace")
-    print(f"sha256({outfile.name}) = {digest}")
+    print(f"sha256({outfile.name}, {formatter}) = {digest}")
     result = client.submit(problem_id, digest, code=code)
     verdict = result["result"]
     print(f"=> {verdict}" + (" ✅" if result["correct"] else " ❌"))
@@ -215,13 +234,16 @@ def cmd_create(args) -> int:
     statement = _statement(args.statement, args.statement_file, field="statement")
     if not statement:
         raise ApiError("問題文を --statement か --statement-file で指定してください。")
-    answer = _resolve_answer_hash(args.answer, args.answer_sha256)
+    formatter = args.output_formatter or "identity-v1"
+    answer = _resolve_answer_hash(args.answer, args.answer_sha256, formatter)
     if not answer:
         raise ApiError("想定出力を --answer (ファイル) か --answer-sha256 で指定してください。")
 
     payload: dict = {"title": title, "statement": statement, "answer_sha256": answer}
     if args.difficulty:
         payload["difficulty"] = args.difficulty
+    if args.output_formatter:
+        payload["output_formatter"] = args.output_formatter
     if args.date:
         payload["date"] = args.date
     editorial = _statement(args.editorial, args.editorial_file, field="editorial")
@@ -267,9 +289,16 @@ def cmd_edit(args) -> int:
         payload["statement"] = statement
     if args.difficulty:
         payload["difficulty"] = args.difficulty
-    answer = _resolve_answer_hash(args.answer, args.answer_sha256)
+    if args.output_formatter and not (args.answer or args.answer_sha256):
+        raise ApiError("--output-formatter を変更する場合は --answer か --answer-sha256 も指定してください。")
+    formatter = args.output_formatter
+    if args.answer and formatter is None:
+        formatter = _output_formatter(client, args.problem_id, authored=True)
+    answer = _resolve_answer_hash(args.answer, args.answer_sha256, formatter or "identity-v1")
     if answer:
         payload["answer_sha256"] = answer
+    if args.output_formatter:
+        payload["output_formatter"] = args.output_formatter
     editorial = _statement(args.editorial, args.editorial_file, field="editorial")
     if editorial is not None:
         payload["editorial"] = editorial
@@ -371,6 +400,10 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--difficulty", choices=DIFFICULTIES, help="難易度")
         p.add_argument("--answer", help="想定出力ファイル (sha256 を計算)")
         p.add_argument("--answer-sha256", help="想定出力の sha256 ハッシュ (64桁)")
+        p.add_argument(
+            "--output-formatter", choices=OUTPUT_FORMATTERS,
+            help="SHA-256 前に適用する出力正規化方式 (既定: identity-v1)",
+        )
         p.add_argument("--input", help="入力ファイル (内容を送信)")
         p.add_argument("--input-filename", help="ダウンロード時のファイル名 (既定: 入力ファイル名)")
         p.add_argument("--editorial", help="解説 (インライン)")
