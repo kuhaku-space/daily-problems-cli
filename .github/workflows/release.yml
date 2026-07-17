@@ -1,0 +1,30 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+    paths: [pyproject.toml]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          version=$(grep -m1 '^version = ' pyproject.toml | sed -E 's/version = "(.*)"/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Create release if tag is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ steps.version.outputs.version }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release $tag already exists, skipping"
+          else
+            gh release create "$tag" --title "$tag" --notes "Release $tag" --target "${{ github.sha }}"
+          fi
